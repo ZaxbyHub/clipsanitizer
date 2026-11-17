@@ -84,6 +84,7 @@ const out = path.join(outDir, 'fold-table.json')
 fs.writeFileSync(out, JSON.stringify(fold, null, 2) + '\n', 'utf-8')
 console.log(
   `wrote ${out} (${Object.keys(fold.substitutions).length} substitutions, ` +
-    `${Object.keys(fold.transliterations).length} transliterations, ` +
+    `${Object.keys(fold.fallbackTransliterations).length} fallback + ` +
+    `${Object.keys(fold.greekTransliterations).length} greek transliterations, ` +
     `${greekAnnotated.filter(g => g.note).length} annotated)`,
 )
