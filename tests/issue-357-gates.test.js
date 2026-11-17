@@ -66,6 +66,18 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(sanitize('γαμβ').text).toBe('gauv')
   })
 
+  test('a SPACE between the digit and gamma/lambda still drops WITH a warning (round-4)', () => {
+    // 'Dopamine 3 gamma' is at least as common as '3gamma'; the whitespace
+    // stage runs AFTER the Greek stage, so raw Unicode spaces still count.
+    const cases = ['3γ', '3 γ', '5 λ']
+    for (const input of cases) {
+      const r = sanitize(input + ' IV')
+      expect(r.text).not.toContain('g IV')
+      expect(r.text).not.toContain('l IV')
+      expect(r.warnings.length).toBe(1)
+    }
+  })
+
   test('polytonic precomposed forms survive (NFKD decomposes them BEFORE the Greek table runs)', () => {
     // 'ᾶ' (U+1FB6) decomposes at NFKD to α + combining perispomeni; the Greek
     // table runs AFTER that strip, so the base α maps. Before the ordering

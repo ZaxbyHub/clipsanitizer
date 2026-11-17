@@ -124,14 +124,21 @@ export function sanitize(input) {
   for (const [from, to] of GREEK_TRANSLIT) {
     if (!text.includes(from)) continue
     const greekBefore = text
-    // gamma/lambda digit-adjacency (critic round-2): '50γ' is
+    // gamma/lambda digit-adjacency (critic round-2, widened round-4):
+    // '50γ' is
     // clinical shorthand for micrograms and '5λ' for microlitres -
     // mapping them to g/l next to a digit silently produced a 10^6x misread
     // with no warning. A gamma/lambda DIRECTLY AFTER A DIGIT stays unmapped:
     // the final strip drops it WITH the unmapped-chars warning (pre-PR
     // behavior restored). Everywhere else they transliterate normally.
     if (from === 'γ' || from === 'λ') {
-      const re = new RegExp(`(?<!\\d)${from}`, 'g')
+      // Whitespace/control chars between the digit and the letter do not
+      // break the adjacency (the whitespace stage runs later, so Unicode
+      // spaces are still raw here); variable-length lookbehind is legal in JS.
+      const re = new RegExp(
+        `(?<!\\d[ \\t\\x00-\\x1F\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]*)${from}`,
+        'g',
+      )
       const matches = text.match(re)
       if (!matches) continue
       text = text.replace(re, to)
