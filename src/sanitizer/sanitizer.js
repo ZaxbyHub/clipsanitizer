@@ -1,5 +1,6 @@
 // src/sanitizer/sanitizer.js
 import { CHARMAP } from './charmap.js'
+import { GREEK_TRANSLIT } from './greek.js'
 
 /**
  * sanitize(input)
@@ -72,6 +73,23 @@ export function sanitize(input) {
   const beforeTranslit = text
   for (const [from, to] of TRANSLITERATION_FALLBACK) {
     if (text.includes(from)) text = text.split(from).join(to)
+  }
+
+  // Greek transliteration (issue #357 gate — the 'Greek letter drop' fix):
+  // without this, every Greek letter outside CHARMAP's lone μ was silently
+  // destroyed by the final ASCII strip ('Δόση 5mg' → '5mg'). Runs after the
+  // fallback map and before NFKD, so polytonic forms decompose to mapped
+  // base letters + strippable combining marks. Each replacement is counted
+  // so the change summary stays honest.
+  const beforeGreek = text
+  for (const [from, to] of GREEK_TRANSLIT) {
+    if (!text.includes(from)) continue
+    const greekBefore = text
+    text = text.split(from).join(to)
+    if (text !== greekBefore) {
+      const key = `greek:${from}→${to}`
+      changeCounts.set(key, (changeCounts.get(key) ?? 0) + (greekBefore.split(from).length - 1))
+    }
   }
 
   // NFKD decomposition + combining mark removal (handles é, ñ, ü, â, etc.)
@@ -169,6 +187,7 @@ function buildChangeSummary(changeCounts) {
     arrows:      'arrow characters converted',
     math:        'math symbols converted',
     nfkd_normalize: 'Latin characters transliterated to ASCII',
+    greek_translit: 'Greek characters transliterated to ASCII',
     whitespace_normalized: 'non-standard whitespace normalized',
     control_chars_removed: 'control characters removed',
     final_strip: 'remaining non-ASCII characters stripped',
@@ -180,6 +199,11 @@ function buildChangeSummary(changeCounts) {
     if (key === 'nfkd_normalize' || key === 'whitespace_normalized' || key === 'control_chars_removed' || key === 'final_strip') {
       if (!categoryCounts[key]) categoryCounts[key] = 0
       categoryCounts[key] += count
+      continue
+    }
+    if (key.startsWith('greek:') || key === 'greek_translit') {
+      if (!categoryCounts['greek_translit']) categoryCounts['greek_translit'] = 0
+      categoryCounts['greek_translit'] += count
       continue
     }
     const from = key.split('→')[0]

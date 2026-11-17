@@ -688,13 +688,18 @@ describe('exact change counts and warnings', () => {
     expect(ctrl.count).toBe(3)
   })
   test('warning emitted for unmapped dropped chars', () => {
-    const { warnings } = sanitize('\u03BB\u6F22')  // lambda, 漢 — not in charmap
+    const { warnings } = sanitize('\u6F22\u042F')  // 漢 (CJK), Я (Cyrillic) — no transliteration mapped
     expect(warnings).toBeDefined()
     expect(Array.isArray(warnings)).toBe(true)
     expect(warnings.length).toBeGreaterThan(0)
     expect(warnings[0].type).toBe('unmapped_chars_dropped')
     expect(warnings[0].count).toBe(2)
-    expect(warnings[0].chars).toContain('\u03BB')
+    expect(warnings[0].chars).toContain('\u6F22')
+  })
+  test('Greek lambda transliterates instead of dropping (issue #357 gate 1)', () => {
+    const { text, warnings } = sanitize('\u03BB5mg')
+    expect(text).toBe('l5mg')
+    expect(warnings).toEqual([]) // λ is no longer an unmapped drop
   })
   test('clean input has empty warnings', () => {
     const { warnings } = sanitize('Hello World')

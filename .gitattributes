@@ -1,0 +1,4 @@
+# Test fixtures are byte-sensitive (tests read them raw); keep them LF so a
+# Windows autocrlf checkout does not flip expected-output fixtures to CRLF and
+# break the word-sample comparisons.
+tests/fixtures/** -text

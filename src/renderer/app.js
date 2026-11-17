@@ -119,10 +119,21 @@ function runSanitize() {
 btnSanitize.addEventListener('click', runSanitize)
 
 // ── Copy output to clipboard ─────────────────────────────────────────────────
+// Issue #357 gate — the 'Copy-next double-click repeat' fix: identical
+// output within the Copied! window (1500ms, matching the button reset) is a
+// no-op; new content or a lapsed window copies for real.
+let lastCopiedText = null
+let lastCopiedAt = 0
+
 async function copyOutput() {
   if (!window.electronAPI) { showToast('Clipboard unavailable.'); return }
   const text = outputEl.value
   if (!text) return
+
+  const now = Date.now()
+  if (text === lastCopiedText && now - lastCopiedAt < 1500) return
+  lastCopiedText = text
+  lastCopiedAt = now
 
   try {
     await window.electronAPI.writeClipboard(text)
