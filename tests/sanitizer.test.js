@@ -688,12 +688,21 @@ describe('exact change counts and warnings', () => {
     expect(ctrl.count).toBe(3)
   })
   test('warning emitted for unmapped dropped chars', () => {
-    const { warnings } = sanitize('\u03BB\u6F22')  // lambda, 漢 — not in charmap
+    const { warnings } = sanitize('\u6F22\u042F')  // 漢 (CJK), Я (Cyrillic) — no transliteration mapped
     expect(warnings).toBeDefined()
     expect(Array.isArray(warnings)).toBe(true)
     expect(warnings.length).toBeGreaterThan(0)
     expect(warnings[0].type).toBe('unmapped_chars_dropped')
     expect(warnings[0].count).toBe(2)
+    expect(warnings[0].chars).toContain('\u6F22')
+  })
+  test('standalone lambda before a digit drops WITH a warning (unit shorthand, issue #357)', () => {
+    // lambda5mg is old microlitre shorthand; mapping lambda->l read it as litres.
+    // The word rule leaves it unmapped: dropped with the warning (the safe
+    // direction), and the clinician owns any future mapping at sign-off.
+    const { text, warnings } = sanitize('\u03BB5mg')
+    expect(text).toBe('5mg')
+    expect(warnings.length).toBe(1)
     expect(warnings[0].chars).toContain('\u03BB')
   })
   test('clean input has empty warnings', () => {

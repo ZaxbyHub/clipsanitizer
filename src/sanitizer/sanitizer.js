@@ -1,5 +1,25 @@
 // src/sanitizer/sanitizer.js
 import { CHARMAP } from './charmap.js'
+import { GREEK_TRANSLIT } from './greek.js'
+
+// Transliteration fallback (issue history): Latin letters that do NOT
+// decompose under NFKD at all, mapped by hand. Module-level + exported so
+// scripts/export-foldtable.js ships the SAME table (single source of truth;
+// the sync test pins it). Keep in sync with the pipeline order: applied
+// BEFORE NFKD.
+export const TRANSLITERATION_FALLBACK = [
+  ['ø', 'o'],   // ø -> o
+  ['Ø', 'O'],   // Ø -> O
+  ['ł', 'l'],   // ł -> l
+  ['Ł', 'L'],   // Ł -> L
+  ['ß', 'ss'],  // ß -> ss
+  ['đ', 'd'],   // đ -> d
+  ['Đ', 'D'],   // Đ -> D
+  ['þ', 'th'],  // þ -> th
+  ['Þ', 'Th'],  // Þ -> Th
+  ['ð', 'd'],   // ð -> d
+  ['Ð', 'D'],   // Ð -> D
+]
 
 /**
  * sanitize(input)
@@ -12,11 +32,14 @@ import { CHARMAP } from './charmap.js'
  * Pipeline (order is mandatory):
  *  0. Fraction adjacency guard (digit + fraction char → insert space)
  *  1. Named substitutions from CHARMAP
- *  2. NFKD normalization + combining mark strip + fallback transliteration
- *  3. Unicode whitespace variants → regular space
- *  4. C0/C1 control char removal (keep \t \n \r)
- *  5. CRLF normalization → \n
- *  6. Final strip: remove anything outside printable ASCII (32-126) + \t\n\r
+ *  2. Fallback transliteration (non-NFKD-decomposable Latin)
+ *  3. NFKD normalization + combining mark strip (COMPATIBILITY chars fold here)
+ *  4. Post-NFKD micro re-application (CHARMAP's μg/μ rules over NFKD-produced μ)
+ *  5. Greek transliteration (after the strip, so polytonic bases are caught)
+ *  6. Unicode whitespace variants → regular space
+ *  7. C0/C1 control char removal (keep \t \n \r)
+ *  8. CRLF normalization → \n
+ *  9. Final strip: remove anything outside printable ASCII (32-126) + \t\n\r
  */
 export function sanitize(input) {
   if (typeof input !== 'string') return { text: '', changes: [], warnings: [] }
@@ -54,19 +77,7 @@ export function sanitize(input) {
   // Replaces the former NFKC-only step.
   // NFKD decomposes é → e + ́  (combining acute). Strip combining marks → e.
   // Fallback map handles chars that don't decompose under NFKD at all.
-  const TRANSLITERATION_FALLBACK = [
-    ['\u00F8', 'o'],   // ø → o
-    ['\u00D8', 'O'],   // Ø → O
-    ['\u0142', 'l'],   // ł → l
-    ['\u0141', 'L'],   // Ł → L
-    ['\u00DF', 'ss'],  // ß → ss
-    ['\u0111', 'd'],   // đ → d
-    ['\u0110', 'D'],   // Đ → D
-    ['\u00FE', 'th'],  // þ → th
-    ['\u00DE', 'Th'],  // Þ → Th
-    ['\u00F0', 'd'],   // ð → d
-    ['\u00D0', 'D'],   // Ð → D
-  ]
+  // (TRANSLITERATION_FALLBACK is the exported module-level table above.)
 
   // Apply fallback BEFORE NFKD so these chars don't survive into the final strip
   const beforeTranslit = text
@@ -83,6 +94,63 @@ export function sanitize(input) {
   // Track whether any transliteration occurred
   if (text !== beforeNFKD || text !== beforeTranslit) {
     changeCounts.set('nfkd_normalize', 1)
+  }
+
+  // Post-NFKD micro re-application (critic BLOCKER fix, 2026-11-17): NFKD
+  // decomposes compatibility characters (U+338D SQUARE MU G, U+3395 SQUARE MU L,
+  // U+339B, U+339C, U+33B2, U+33B3...) into mu sequences AFTER CHARMAP has run.
+  // Re-apply CHARMAP's clinical micro rules here (same order: ug first, then
+  // standalone mu), so '50' + U+338D becomes '50mcg' — never '50mg'. Counted
+  // under the substitutions category, where CHARMAP's own pass reports.
+  const microRules = CHARMAP.filter(([from]) => from === 'μg' || from === 'μ')
+  for (const [from, to] of microRules) {
+    if (!text.includes(from)) continue
+    const before = text
+    text = text.split(from).join(to)
+    if (text !== before) {
+      const count = before.split(from).length - 1
+      changeCounts.set(`micro:${from}→${to}`, (changeCounts.get(`micro:${from}→${to}`) ?? 0) + count)
+    }
+  }
+
+  // Greek transliteration (issue #357 gate — the 'Greek letter drop' fix):
+  // without this, every Greek letter outside CHARMAP's lone μ was silently
+  // destroyed by the final ASCII strip ('Δόση 5mg' → '5mg'). Runs AFTER the
+  // NFKD + mark strip: polytonic precomposed forms (ᾶ, ἀ-ώ breathing forms)
+  // decompose AT NFKD to base letters + marks, so running the table here
+  // catches every decomposed base letter — running it before NFKD missed
+  // them. Each replacement is counted so the change summary stays honest.
+  const beforeGreek = text
+  for (const [from, to] of GREEK_TRANSLIT) {
+    if (!text.includes(from)) continue
+    const greekBefore = text
+    // gamma/lambda word rule (critic round-4 STRUCTURAL fix - replaces the
+    // digit-adjacency whack-a-mole): gamma/lambda transliterate ONLY inside
+    // a Greek word, i.e. adjacent to another Greek letter (checked against
+    // the text as it stands at the START of the Greek stage - gamma/lambda
+    // are processed FIRST, before the other letters map to Latin). Every
+    // other occurrence - unit positions like 'gamma/kg/min' or '(gamma)',
+    // digit-adjacent shorthand, separators - is left UNMAPPED: the final
+    // strip drops it WITH the unmapped-chars warning (the safe pre-PR
+    // behavior; the clinician reviews this rule at sign-off, #357 AC2).
+    if (from === 'γ' || from === 'λ') {
+      const G = '[\\u0370-\\u03FF]'
+      const re = new RegExp(
+        `(?<=${G})${from}|${from}(?=${G})`,
+        'g',
+      )
+      const matches = text.match(re)
+      if (!matches) continue
+      text = text.replace(re, to)
+      changeCounts.set(`greek:${from}→${to}`,
+        (changeCounts.get(`greek:${from}→${to}`) ?? 0) + matches.length)
+      continue
+    }
+    text = text.split(from).join(to)
+    if (text !== greekBefore) {
+      const key = `greek:${from}→${to}`
+      changeCounts.set(key, (changeCounts.get(key) ?? 0) + (greekBefore.split(from).length - 1))
+    }
   }
 
   // ── Step 3: Unicode whitespace → regular space ────────────────────────────
@@ -168,7 +236,8 @@ function buildChangeSummary(changeCounts) {
     ligatures:   'ligatures expanded',
     arrows:      'arrow characters converted',
     math:        'math symbols converted',
-    nfkd_normalize: 'Latin characters transliterated to ASCII',
+    nfkd_normalize: 'Latin/Greek characters transliterated to ASCII',
+    greek_translit: 'Greek characters transliterated to ASCII',
     whitespace_normalized: 'non-standard whitespace normalized',
     control_chars_removed: 'control characters removed',
     final_strip: 'remaining non-ASCII characters stripped',
@@ -180,6 +249,18 @@ function buildChangeSummary(changeCounts) {
     if (key === 'nfkd_normalize' || key === 'whitespace_normalized' || key === 'control_chars_removed' || key === 'final_strip') {
       if (!categoryCounts[key]) categoryCounts[key] = 0
       categoryCounts[key] += count
+      continue
+    }
+    if (key.startsWith('micro:')) {
+      // fold into the math category where CHARMAP's mu already reports,
+      // so the two passes read as one.
+      if (!categoryCounts['math']) categoryCounts['math'] = 0
+      categoryCounts['math'] += count
+      continue
+    }
+    if (key.startsWith('greek:') || key === 'greek_translit') {
+      if (!categoryCounts['greek_translit']) categoryCounts['greek_translit'] = 0
+      categoryCounts['greek_translit'] += count
       continue
     }
     const from = key.split('→')[0]

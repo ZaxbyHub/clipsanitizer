@@ -24,6 +24,13 @@ const fileInput     = document.getElementById('file-input')
 let toastTimer = null
 let copyResetTimer = null
 let autoRun = false
+// Issue #357 gate — the 'Copy-next double-click repeat' fix: the autoRun
+// path copies once after sanitize, and an immediate second trigger (the
+// user's own click, or an impatient double-click) re-copied the SAME output
+// and re-toasted. Guard: identical output within the Copied! window (1500ms,
+// matching the button reset) is a no-op. New content always copies.
+let lastCopiedText = null
+let lastCopiedAt = 0
 
 // ── Character counter ────────────────────────────────────────────────────────
 function updateCharCount(el, counterEl) {
@@ -123,6 +130,14 @@ export async function copyOutput() {
   const text = outputEl.value
   if (!text) return
 
+  // Issue #357 gate: an immediate repeat of the SAME output within the
+  // Copied! window is a no-op (double-click repeat). Content changed, or
+  // the window lapsed → copy for real.
+  const now = Date.now()
+  if (text === lastCopiedText && now - lastCopiedAt < 1500) return
+  lastCopiedText = text
+  lastCopiedAt = now
+
   try {
     await navigator.clipboard.writeText(text)
     btnCopyOutput.classList.add('btn--copied')
@@ -134,12 +149,24 @@ export async function copyOutput() {
     }, 1500)
     showToast('Copied to clipboard.')
   } catch (err) {
+    // Issue #357 review: a failed write must not poison the guard — the
+    // text was NOT copied, so an immediate retry must be allowed through.
+    lastCopiedText = null
+    lastCopiedAt = 0
     showToast('Could not write to clipboard.')
     console.error('[ClipSanitizer] clipboard write error:', err)
   }
 }
 
 btnCopyOutput.addEventListener('click', copyOutput)
+
+// Test seam: the copy guard is module state; tests that exercise copyOutput
+// back-to-back reset it so the 1500ms idempotence window does not leak
+// across test cases.
+export function _resetCopyGuardForTests() {
+  lastCopiedText = null
+  lastCopiedAt = 0
+}
 
 // ── Paste from clipboard ──────────────────────────────────────────────────────
 export async function pasteFromClipboard() {
