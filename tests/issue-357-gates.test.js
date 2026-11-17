@@ -59,24 +59,44 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(greek.count).toBe(3)
   })
 
-  test('fold-table.json (if exported) stays in sync with the live tables', () => {
+  test('fold-table.json stays in sync with the live tables and records the stages', () => {
+    // Committed artifact: missing = someone deleted it -> hard fail, not skip
+    // (critic round 1: the fold table is the clinician-review contract).
     const ftPath = path.resolve(__dirname, '..', 'docs', 'fold-table.json')
-    if (!fs.existsSync(ftPath)) return // export script not yet run; skip
+    expect(fs.existsSync(ftPath)).toBe(true)
     const ft = JSON.parse(fs.readFileSync(ftPath, 'utf-8'))
     for (const [from, to] of CHARMAP) {
       expect(ft.substitutions[from]).toBe(to)
     }
     for (const [from, to] of GREEK_TRANSLIT) {
-      expect(ft.transliterations[from]).toBe(to)
+      expect(ft.greekTransliterations[from]).toBe(to)
     }
     for (const [from, to] of TRANSLITERATION_FALLBACK) {
-      expect(ft.transliterations[from]).toBe(to)
+      expect(ft.fallbackTransliterations[from]).toBe(to)
     }
+    // mu ownership: CHARMAP substitutions carry it; the Greek table must not.
+    expect(ft.substitutions['μ']).toBe('u')
+    expect(ft.greekTransliterations['μ']).toBeUndefined()
+    expect(ft.microSubstitutions['μg']).toBe('mcg')
+    // stage order + the fraction guard + NFKD semantics are recorded
+    expect(Array.isArray(ft.stageOrder)).toBe(true)
+    expect(ft.stageOrder.join(' ')).toContain('fraction adjacency guard')
+    expect(ft.stageOrder.join(' ')).toContain('COMPATIBILITY characters fold')
+    expect(ft.knownOpenQuestion.item).toContain('mu')
   })
 })
 
 // ── Gate 2: chunk-split defect is a drift tripwire ───────────────────────────
 describe('gate 2: no chunker exists (clinician gate tripwire)', () => {
+  test('BEHAVIORAL: 10k characters survive sanitize with no truncation', () => {
+    // Primary re-arming leg for the chunk-split defect: if ANY chunker or
+    // truncation is introduced on the sanitize path, length diverges here.
+    // (The copy-side half of this leg lives in issue-357-copy.test.js.)
+    const long = 'Patient takes medication daily. '.repeat(320) // ~10k chars
+    const { text } = sanitize(long)
+    expect(text.length).toBe(long.length)
+  })
+
   test('the source tree ships no chunking of sanitized output', () => {
     const srcDir = path.resolve(__dirname, '..', 'src')
     const offenders = []

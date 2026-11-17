@@ -1,25 +1,30 @@
 // src/sanitizer/greek.js
 // Greek transliteration table (issue #357 gate — the 'Greek letter drop' fix).
 //
-// Before this table, any Greek letter that survived the CHARMAP (only μ was
-// mapped) was silently DESTROYED by the final ASCII strip — e.g. 'Δόση 5mg'
-// lost its word entirely. Now Greek transliterates to printable ASCII:
-// monophthong-style (η→i, ω→o, θ→th, χ→ch, ψ→ps, φ→f, β→v, γ→g, δ→d), with
-// the tonos-vowel precomposed forms mapped explicitly. Polytonic accented
-// forms decompose under NFKD to a mapped base letter + a combining mark that
-// the existing mark-strip already removes.
+// Before this table, any Greek letter that survived CHARMAP was silently
+// DESTROYED by the final ASCII strip — e.g. 'Δόση 5mg' lost its word entirely.
+// Now Greek transliterates to printable ASCII: monophthong-style (η→i, ω→o,
+// θ→th, χ→ch, ψ→ps, φ→f, β→v, γ→g, δ→d). The pipeline runs this stage AFTER
+// NFKD + mark-strip, so polytonic precomposed forms (ᾶ, breathing forms, and
+// the tonos vowels) decompose first and are caught by their BASE letter's
+// entry — the precomposed tonos entries below are a safety net.
 //
-// Order matters: longer sources first (none currently multi-char, but keep
-// the discipline). μg→mcg stays in CHARMAP and runs before this table.
+// mu is DELIBERATELY ABSENT: CHARMAP owns it (μg→mcg, μ→u — the clinical
+// micro symbol), including the post-NFKD re-application for compatibility
+// characters like U+338D. Mapping μ→m here turned U+338D into 'mg' — a
+// silent 1000× dose error (critic round-1 BLOCKER, 2026-11-17).
+//
+// The fold table the clinician reviews is generated from this table plus
+// CHARMAP and the fallback: `npm run export-foldtable`.
 
 export const GREEK_TRANSLIT = [
-  // tonos vowels (precomposed) — map before base letters
+  // tonos vowels (precomposed) — safety net; NFKD handles these first
   ['ά', 'a'], ['έ', 'e'], ['ή', 'i'], ['ί', 'i'], ['ό', 'o'], ['ύ', 'y'], ['ώ', 'o'],
   ['ϊ', 'i'], ['ϋ', 'y'], ['ΐ', 'i'], ['ΰ', 'y'],
   ['Ά', 'A'], ['Έ', 'E'], ['Ή', 'I'], ['Ί', 'I'], ['Ό', 'O'], ['Ύ', 'Y'], ['Ώ', 'O'],
   // lowercase
   ['α', 'a'], ['β', 'v'], ['γ', 'g'], ['δ', 'd'], ['ε', 'e'], ['ζ', 'z'],
-  ['η', 'i'], ['θ', 'th'], ['ι', 'i'], ['κ', 'k'], ['λ', 'l'], ['μ', 'm'],
+  ['η', 'i'], ['θ', 'th'], ['ι', 'i'], ['κ', 'k'], ['λ', 'l'],
   ['ν', 'n'], ['ξ', 'x'], ['ο', 'o'], ['π', 'p'], ['ρ', 'r'],
   ['σ', 's'], ['ς', 's'], ['τ', 't'], ['υ', 'y'], ['φ', 'f'], ['χ', 'ch'],
   ['ψ', 'ps'], ['ω', 'o'],

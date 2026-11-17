@@ -1,5 +1,17 @@
 {
   "generated": "2026-11-17",
+  "stageOrder": [
+    "0. fraction adjacency guard: a digit directly followed by a fraction character gets a space inserted (87½ -> 87 1/2) so the fraction conversion cannot read as a decimal",
+    "1. named substitutions (substitutions below; clinical micro multi-char rules first)",
+    "2a. transliteration fallback (fallbackTransliterations below; Latin letters that do not decompose under NFKD)",
+    "2b. NFKD decomposition: combining marks stripped; COMPATIBILITY characters fold (U+338D -> mu+g, circled digits -> digit, fullwidth -> ASCII) - this CHANGES content, it is not just mark-stripping",
+    "2c. post-NFKD micro re-application: the clinical micro rules (microSubstitutions below) run AGAIN over NFKD-produced mu sequences, so U+338D reads mcg - never mg (critic round-1 BLOCKER fix)",
+    "2d. Greek transliteration (greekTransliterations below; mu excluded - see the note)",
+    "3. Unicode whitespace variants -> regular space",
+    "4. C0/C1 control characters removed (tab/newline/CR kept)",
+    "5. CRLF -> LF",
+    "6. final strip: anything still outside printable ASCII is REMOVED and surfaces as an unmapped-chars warning"
+  ],
   "substitutions": {
     "μg": "mcg",
     "µg": "mcg",
@@ -181,7 +193,13 @@
     "μ": "u",
     "µ": "u"
   },
-  "transliterations": {
+  "microSubstitutions": {
+    "μg": "mcg",
+    "μg/mL": "mcg/mL",
+    "μg/kg": "mcg/kg",
+    "μ": "u"
+  },
+  "fallbackTransliterations": {
     "ø": "o",
     "Ø": "O",
     "ł": "l",
@@ -192,7 +210,9 @@
     "þ": "th",
     "Þ": "Th",
     "ð": "d",
-    "Ð": "D",
+    "Ð": "D"
+  },
+  "greekTransliterations": {
     "ά": "a",
     "έ": "e",
     "ή": "i",
@@ -222,7 +242,6 @@
     "ι": "i",
     "κ": "k",
     "λ": "l",
-    "μ": "m",
     "ν": "n",
     "ξ": "x",
     "ο": "o",
@@ -261,10 +280,106 @@
     "Ψ": "Ps",
     "Ω": "O"
   },
+  "greekNotes": [
+    {
+      "from": "ά",
+      "to": "a",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "έ",
+      "to": "e",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ή",
+      "to": "i",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ί",
+      "to": "i",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ό",
+      "to": "o",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ύ",
+      "to": "y",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ώ",
+      "to": "o",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ϊ",
+      "to": "i",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ϋ",
+      "to": "y",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ΐ",
+      "to": "i",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "ΰ",
+      "to": "y",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ά",
+      "to": "A",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Έ",
+      "to": "E",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ή",
+      "to": "I",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ί",
+      "to": "I",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ό",
+      "to": "O",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ύ",
+      "to": "Y",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    },
+    {
+      "from": "Ώ",
+      "to": "O",
+      "note": "decomposed at NFKD before this stage; the base-letter entry applies (this entry is a safety net)"
+    }
+  ],
+  "knownOpenQuestion": {
+    "item": "standalone mu inside Greek WORDS",
+    "behavior": "CHARMAP maps standalone mu to \"u\" (the clinical micro convention), so a Greek word containing mu reads with u where the Greek m sound is. For dose text this is the SAFE direction; for Greek prose it is a documented approximation.",
+    "decision": "CLINICIAN REVIEW at sign-off (trainingapp #357 AC2): keep, or add a context rule"
+  },
   "removals": {
-    "description": "Characters NOT in the tables above that are removed: NFKD combining marks, Unicode whitespace variants (mapped to space), C0/C1 control chars (kept: tab/newline/CR), and any remaining non-printable-ASCII character. Unmapped removals surface as warnings at run time.",
+    "description": "Characters NOT in the tables above that are removed: NFKD combining marks, C0/C1 control chars (kept: tab/newline/CR), and any remaining non-printable-ASCII character. Unmapped removals surface as warnings at run time.",
     "combining_marks": "stripped after NFKD decomposition",
-    "unicode_whitespace": "mapped to regular space",
     "c0_c1_controls": "removed (tab/newline/CR kept)",
     "remaining_non_ascii": "removed with an unmapped-chars warning"
   }

@@ -32,11 +32,14 @@ export const TRANSLITERATION_FALLBACK = [
  * Pipeline (order is mandatory):
  *  0. Fraction adjacency guard (digit + fraction char → insert space)
  *  1. Named substitutions from CHARMAP
- *  2. NFKD normalization + combining mark strip + fallback transliteration
- *  3. Unicode whitespace variants → regular space
- *  4. C0/C1 control char removal (keep \t \n \r)
- *  5. CRLF normalization → \n
- *  6. Final strip: remove anything outside printable ASCII (32-126) + \t\n\r
+ *  2. Fallback transliteration (non-NFKD-decomposable Latin)
+ *  3. NFKD normalization + combining mark strip (COMPATIBILITY chars fold here)
+ *  4. Post-NFKD micro re-application (CHARMAP's μg/μ rules over NFKD-produced μ)
+ *  5. Greek transliteration (after the strip, so polytonic bases are caught)
+ *  6. Unicode whitespace variants → regular space
+ *  7. C0/C1 control char removal (keep \t \n \r)
+ *  8. CRLF normalization → \n
+ *  9. Final strip: remove anything outside printable ASCII (32-126) + \t\n\r
  */
 export function sanitize(input) {
   if (typeof input !== 'string') return { text: '', changes: [], warnings: [] }
@@ -91,6 +94,23 @@ export function sanitize(input) {
   // Track whether any transliteration occurred
   if (text !== beforeNFKD || text !== beforeTranslit) {
     changeCounts.set('nfkd_normalize', 1)
+  }
+
+  // Post-NFKD micro re-application (critic BLOCKER fix, 2026-11-17): NFKD
+  // decomposes compatibility characters (U+338D SQUARE MU G, U+3395 SQUARE MU L,
+  // U+339B, U+339C, U+33B2, U+33B3...) into mu sequences AFTER CHARMAP has run.
+  // Re-apply CHARMAP's clinical micro rules here (same order: ug first, then
+  // standalone mu), so '50' + U+338D becomes '50mcg' — never '50mg'. Counted
+  // under the substitutions category, where CHARMAP's own pass reports.
+  const microRules = CHARMAP.filter(([from]) => from === 'μg' || from === 'μ')
+  for (const [from, to] of microRules) {
+    if (!text.includes(from)) continue
+    const before = text
+    text = text.split(from).join(to)
+    if (text !== before) {
+      const count = before.split(from).length - 1
+      changeCounts.set(`micro:${from}→${to}`, (changeCounts.get(`micro:${from}→${to}`) ?? 0) + count)
+    }
   }
 
   // Greek transliteration (issue #357 gate — the 'Greek letter drop' fix):
@@ -207,6 +227,13 @@ function buildChangeSummary(changeCounts) {
     if (key === 'nfkd_normalize' || key === 'whitespace_normalized' || key === 'control_chars_removed' || key === 'final_strip') {
       if (!categoryCounts[key]) categoryCounts[key] = 0
       categoryCounts[key] += count
+      continue
+    }
+    if (key.startsWith('micro:')) {
+      // fold into the math category where CHARMAP's mu already reports,
+      // so the two passes read as one.
+      if (!categoryCounts['math']) categoryCounts['math'] = 0
+      categoryCounts['math'] += count
       continue
     }
     if (key.startsWith('greek:') || key === 'greek_translit') {

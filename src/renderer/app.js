@@ -146,6 +146,10 @@ async function copyOutput() {
     }, 1500)
     showToast('Copied to clipboard.')
   } catch (err) {
+    // Issue #357 review: a failed write must not poison the guard — the
+    // text was NOT copied, so an immediate retry must be allowed through.
+    lastCopiedText = null
+    lastCopiedAt = 0
     showToast('Could not write to clipboard.')
     console.error('[ClipSanitizer] clipboard write error:', err)
   }
