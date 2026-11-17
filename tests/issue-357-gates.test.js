@@ -111,7 +111,9 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(Array.isArray(ft.stageOrder)).toBe(true)
     expect(ft.stageOrder.join(' ')).toContain('fraction adjacency guard')
     expect(ft.stageOrder.join(' ')).toContain('COMPATIBILITY characters fold')
-    expect(ft.knownOpenQuestion.item).toContain('mu')
+    const qItems = ft.knownOpenQuestion.items.map(i => i.item)
+    expect(qItems.some(i => i.includes('mu'))).toBe(true)
+    expect(qItems.some(i => i.includes('gamma/lambda'))).toBe(true)
   })
 })
 

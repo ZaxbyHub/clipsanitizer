@@ -36,13 +36,13 @@ const greekAnnotated = GREEK_TRANSLIT.map(([from, to]) => ({
 // post-NFKD micro pass re-applies CHARMAP's rules for NFKD-produced mu
 // sequences (compatibility characters like U+338D SQUARE MU G).
 const microSubstitutions = Object.fromEntries(
-  CHARMAP.filter(([from]) => from.includes('μ')).map(([from, to]) => [from, to]),
+  CHARMAP.filter(([from]) => from === 'μg' || from === 'μ').map(([from, to]) => [from, to]),
 )
 
 const fold = {
   generated: new Date().toISOString().slice(0, 10),
   stageOrder: [
-    '0. fraction adjacency guard: a digit directly followed by a fraction character gets a space inserted (87½ -> 87 1/2) so the fraction conversion cannot read as a decimal',
+    '0. fraction adjacency guard: a digit directly followed by one of the 9 MAPPED fraction characters gets a space inserted (87½ -> 87 1/2) so the conversion cannot read as a decimal. Known limitation: NFKD decomposes UNMAPPED fraction characters (U+2155 1/5 family) into digit+fraction-slash sequences, so 2⅕ reads 215 (with an unmapped-chars warning) - pre-existing, see knownLimitations',
     '1. named substitutions (substitutions below; clinical micro multi-char rules first)',
     '2a. transliteration fallback (fallbackTransliterations below; Latin letters that do not decompose under NFKD)',
     '2b. NFKD decomposition: combining marks stripped; COMPATIBILITY characters fold (U+338D -> mu+g, circled digits -> digit, fullwidth -> ASCII) - this CHANGES content, it is not just mark-stripping',
@@ -63,7 +63,22 @@ const fold = {
   ),
   greekNotes: greekAnnotated.filter(g => g.note),
   knownOpenQuestion: {
-    item: 'standalone mu inside Greek WORDS',
+    items: [
+      {
+        item: 'standalone mu inside Greek WORDS',
+        behavior:
+          'CHARMAP maps standalone mu to "u" (the clinical micro convention), so a Greek word containing mu reads with u where the Greek m sound is. For dose text this is the SAFE direction; for Greek prose it is a documented approximation.',
+        decision:
+          'CLINICIAN REVIEW at sign-off (trainingapp #357 AC2): keep, or add a context rule',
+      },
+      {
+        item: 'gamma/lambda directly after a digit',
+        behavior:
+          'Left UNMAPPED and dropped with an unmapped-chars warning: gamma after a digit is clinical shorthand for micrograms and lambda for microlitres; mapping them to g/l silently produced a 10^6x / 1000x misread (e.g. 50gamma -> "50g"). Prose gamma/lambda (not after a digit) transliterate normally.',
+        decision:
+          'CLINICIAN REVIEW at sign-off (trainingapp #357 AC2): keep the warned drop, or map to an explicit unit string the clinician names',
+      },
+    ],
     behavior:
       'CHARMAP maps standalone mu to "u" (the clinical micro convention), so a Greek word containing mu reads with u where the Greek m sound is. For dose text this is the SAFE direction; for Greek prose it is a documented approximation.',
     decision:
