@@ -37,6 +37,35 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(sanitize('5μg').text).toBe('5mcg')
   })
 
+  test('micro compatibility characters read as micro, never milli (critic round-2 BLOCKER)', () => {
+    // U+338D/U+3395/U+339B decompose at NFKD into mu sequences AFTER CHARMAP;
+    // the post-NFKD micro pass maps them to the clinical reading. Mutation
+    // bite-proof: deleting the post-NFKD micro pass fails these legs.
+    const cases = [['50㎍', '50mcg'], ['5㎕', '5ul'], ['10㎛', '10um']]
+    for (const [input, expected] of cases) {
+      const r = sanitize(input)
+      expect(r.text).toBe(expected)
+      expect(r.warnings).toEqual([])
+      expect(r.text).not.toMatch(/mg|ml|mm/) // the 1000x misread class
+    }
+  })
+
+  test('gamma/lambda directly after a digit drop WITH a warning (unit-letter class)', () => {
+    // '50gamma' is clinical shorthand for micrograms; mapping gamma->g next
+    // to a digit silently turned a 10^6x misread into confident text. The
+    // digit-adjacent letter is left to the final strip: dropped, warned.
+    const g = sanitize('50γ IV')
+    expect(g.text).toBe('50 IV')
+    expect(g.warnings.length).toBe(1)
+    expect(g.warnings[0].chars).toContain('γ')
+    const l = sanitize('5λ')
+    expect(l.text).toBe('5')
+    expect(l.warnings.length).toBe(1)
+    // prose gamma/lambda (not after a digit) still transliterate
+    expect(sanitize('λόγος').text).toBe('logos')
+    expect(sanitize('γαμβ').text).toBe('gauv')
+  })
+
   test('polytonic precomposed forms survive (NFKD decomposes them BEFORE the Greek table runs)', () => {
     // 'ᾶ' (U+1FB6) decomposes at NFKD to α + combining perispomeni; the Greek
     // table runs AFTER that strip, so the base α maps. Before the ordering

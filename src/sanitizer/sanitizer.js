@@ -124,6 +124,21 @@ export function sanitize(input) {
   for (const [from, to] of GREEK_TRANSLIT) {
     if (!text.includes(from)) continue
     const greekBefore = text
+    // gamma/lambda digit-adjacency (critic round-2): '50γ' is
+    // clinical shorthand for micrograms and '5λ' for microlitres -
+    // mapping them to g/l next to a digit silently produced a 10^6x misread
+    // with no warning. A gamma/lambda DIRECTLY AFTER A DIGIT stays unmapped:
+    // the final strip drops it WITH the unmapped-chars warning (pre-PR
+    // behavior restored). Everywhere else they transliterate normally.
+    if (from === 'γ' || from === 'λ') {
+      const re = new RegExp(`(?<!\\d)${from}`, 'g')
+      const matches = text.match(re)
+      if (!matches) continue
+      text = text.replace(re, to)
+      changeCounts.set(`greek:${from}→${to}`,
+        (changeCounts.get(`greek:${from}→${to}`) ?? 0) + matches.length)
+      continue
+    }
     text = text.split(from).join(to)
     if (text !== greekBefore) {
       const key = `greek:${from}→${to}`
@@ -214,7 +229,7 @@ function buildChangeSummary(changeCounts) {
     ligatures:   'ligatures expanded',
     arrows:      'arrow characters converted',
     math:        'math symbols converted',
-    nfkd_normalize: 'Latin characters transliterated to ASCII',
+    nfkd_normalize: 'Latin/Greek characters transliterated to ASCII',
     greek_translit: 'Greek characters transliterated to ASCII',
     whitespace_normalized: 'non-standard whitespace normalized',
     control_chars_removed: 'control characters removed',
