@@ -696,10 +696,14 @@ describe('exact change counts and warnings', () => {
     expect(warnings[0].count).toBe(2)
     expect(warnings[0].chars).toContain('\u6F22')
   })
-  test('Greek lambda transliterates instead of dropping (issue #357 gate 1)', () => {
+  test('standalone lambda before a digit drops WITH a warning (unit shorthand, issue #357)', () => {
+    // lambda5mg is old microlitre shorthand; mapping lambda->l read it as litres.
+    // The word rule leaves it unmapped: dropped with the warning (the safe
+    // direction), and the clinician owns any future mapping at sign-off.
     const { text, warnings } = sanitize('\u03BB5mg')
-    expect(text).toBe('l5mg')
-    expect(warnings).toEqual([]) // λ is no longer an unmapped drop
+    expect(text).toBe('5mg')
+    expect(warnings.length).toBe(1)
+    expect(warnings[0].chars).toContain('\u03BB')
   })
   test('clean input has empty warnings', () => {
     const { warnings } = sanitize('Hello World')

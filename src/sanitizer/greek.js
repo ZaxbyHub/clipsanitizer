@@ -18,12 +18,16 @@
 // CHARMAP and the fallback: `npm run export-foldtable`.
 
 export const GREEK_TRANSLIT = [
+  // gamma/lambda FIRST: the word rule (adjacency to another Greek letter)
+  // is evaluated against the pre-stage text; processing them first keeps
+  // that context Greek. mu is absent (CHARMAP owns it, see above).
+  ['γ', 'g'], ['λ', 'l'], ['Γ', 'G'],
   // tonos vowels (precomposed) — safety net; NFKD handles these first
   ['ά', 'a'], ['έ', 'e'], ['ή', 'i'], ['ί', 'i'], ['ό', 'o'], ['ύ', 'y'], ['ώ', 'o'],
   ['ϊ', 'i'], ['ϋ', 'y'], ['ΐ', 'i'], ['ΰ', 'y'],
   ['Ά', 'A'], ['Έ', 'E'], ['Ή', 'I'], ['Ί', 'I'], ['Ό', 'O'], ['Ύ', 'Y'], ['Ώ', 'O'],
   // lowercase
-  ['α', 'a'], ['β', 'v'], ['γ', 'g'], ['δ', 'd'], ['ε', 'e'], ['ζ', 'z'],
+  ['α', 'a'], ['β', 'v'], ['δ', 'd'], ['ε', 'e'], ['ζ', 'z'],
   ['η', 'i'], ['θ', 'th'], ['ι', 'i'], ['κ', 'k'], ['λ', 'l'],
   ['ν', 'n'], ['ξ', 'x'], ['ο', 'o'], ['π', 'p'], ['ρ', 'r'],
   ['σ', 's'], ['ς', 's'], ['τ', 't'], ['υ', 'y'], ['φ', 'f'], ['χ', 'ch'],

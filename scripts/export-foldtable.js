@@ -79,9 +79,9 @@ const fold = {
           'CLINICIAN REVIEW at sign-off (trainingapp #357 AC2): keep, or add a context rule',
       },
       {
-        item: 'gamma/lambda after a digit (whitespace between allowed)',
+        item: 'gamma/lambda outside a Greek word (unit positions, digit shorthand, separators, headers)',
         behavior:
-          'Left UNMAPPED and dropped with an unmapped-chars warning: gamma after a digit (whitespace between allowed) is clinical shorthand for micrograms and lambda for microlitres; mapping them to g/l silently produced a 10^6x / 1000x misread (e.g. 50gamma -> "50g"). Prose gamma/lambda (not after a digit) transliterate normally.',
+          'Left UNMAPPED and dropped with an unmapped-chars warning: gamma/lambda transliterate ONLY inside a Greek word (adjacent to another Greek letter); every other occurrence is clinical shorthand for micrograms and lambda for microlitres; mapping them to g/l silently produced a 10^6x / 1000x misread (e.g. 50gamma -> "50g"). Prose gamma/lambda (not after a digit) transliterate normally.',
         decision:
           'CLINICIAN REVIEW at sign-off (trainingapp #357 AC2): keep the warned drop, or map to an explicit unit string the clinician names',
       },

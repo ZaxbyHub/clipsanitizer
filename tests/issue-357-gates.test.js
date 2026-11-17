@@ -66,6 +66,28 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(sanitize('γαμβ').text).toBe('gauv')
   })
 
+  test('STRUCTURAL: gamma/lambda map ONLY inside a Greek word (round-5)', () => {
+    // Unit positions, separators, headers - every non-word occurrence drops
+    // WITH a warning; only Greek-word neighbors map. This ends the
+    // per-variant whack-a-mole (critic round-4 structural fix).
+    const unitCases = [
+      ['γ/kg/min 3', '/kg/min 3'],
+      ['Dose (γ)', 'Dose ()'],
+      ['3-γ', '3-'],
+      ['3, γ', '3, '],
+      ['γ-GTP', '-GTP'],
+    ]
+    for (const [input, expected] of unitCases) {
+      const r = sanitize(input)
+      expect(r.text).toBe(expected) // gamma dropped, never mapped to g
+      expect(r.text).not.toContain('γ')
+      expect(r.warnings.length).toBe(1)
+    }
+    // word contexts still transliterate
+    expect(sanitize('λόγος').text).toBe('logos')
+    expect(sanitize('γαμβ').text).toBe('gauv')
+  })
+
   test('a SPACE between the digit and gamma/lambda still drops WITH a warning (round-4)', () => {
     // 'Dopamine 3 gamma' is at least as common as '3gamma'; the whitespace
     // stage runs AFTER the Greek stage, so raw Unicode spaces still count.
