@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { sanitize } from '../src/sanitizer/sanitizer.js'
 import { CHARMAP } from '../src/sanitizer/charmap.js'
 import { GREEK_TRANSLIT } from '../src/sanitizer/greek.js'
+import { TRANSLITERATION_FALLBACK } from '../src/sanitizer/sanitizer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -36,6 +37,21 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
     expect(sanitize('5μg').text).toBe('5mcg')
   })
 
+  test('polytonic precomposed forms survive (NFKD decomposes them BEFORE the Greek table runs)', () => {
+    // 'ᾶ' (U+1FB6) decomposes at NFKD to α + combining perispomeni; the Greek
+    // table runs AFTER that strip, so the base α maps. Before the ordering
+    // fix these forms were still dropped — this leg is the ordering pin.
+    const r = sanitize('ᾶβα') // ᾶβα
+    expect(r.text).toBe('ava')  // beta maps v (modern convention; the fold table documents it)
+    expect(r.warnings).toEqual([])
+  })
+
+  test('a breathing-form word survives (ἀγγελία -> aggelia)', () => {
+    const r = sanitize('ἀγγελία') // ἀγγελία
+    expect(r.text).toBe('aggelia')
+    expect(r.warnings).toEqual([])
+  })
+
   test('the change summary reports the Greek category with real counts', () => {
     const r = sanitize('ΔΔΔ')
     const greek = r.changes.find(c => c.category === 'greek_translit')
@@ -51,6 +67,9 @@ describe('gate 1: Greek transliteration (no silent drop)', () => {
       expect(ft.substitutions[from]).toBe(to)
     }
     for (const [from, to] of GREEK_TRANSLIT) {
+      expect(ft.transliterations[from]).toBe(to)
+    }
+    for (const [from, to] of TRANSLITERATION_FALLBACK) {
       expect(ft.transliterations[from]).toBe(to)
     }
   })

@@ -8,16 +8,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CHARMAP } from '../src/sanitizer/charmap.js'
 import { GREEK_TRANSLIT } from '../src/sanitizer/greek.js'
+import { TRANSLITERATION_FALLBACK } from '../src/sanitizer/sanitizer.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
-
-// Keep in sync with sanitizer.js step 2 (single source would require
-// exporting from sanitizer.js; the sync check lives in the tests).
-const TRANSLITERATION_FALLBACK = [
-  ['ø', 'o'], ['Ø', 'O'], ['ł', 'l'], ['Ł', 'L'], ['ß', 'ss'], ['đ', 'd'],
-  ['Đ', 'D'], ['þ', 'th'], ['Þ', 'Th'], ['ð', 'd'], ['Ð', 'D'],
-]
 
 const fold = {
   generated: new Date().toISOString().slice(0, 10),

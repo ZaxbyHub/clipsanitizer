@@ -1,7 +1,7 @@
 // tests/issue-357-copy.test.js
 // Gate 3 regression: copyOutput is idempotent within the Copied! window.
 // Harness mirrors tests/web-smoke.test.js (same DOM stubs + clipboard mock).
-import { describe, test, expect, vi, beforeEach } from 'vitest'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const makeEl = (value = '') => ({
   value,
@@ -69,6 +69,9 @@ beforeEach(() => {
 
 describe('gate 3: copyOutput double-click repeat', () => {
   test('an immediate repeat of the SAME output does not write again', async () => {
+    // Deterministic time: a slow runner must not push the two calls past the
+    // 1500ms window and flip this leg green→red (review round 0, finding F1).
+    vi.useFakeTimers({ now: 0 })
     _outputEl.value = 'same output'
     await appModule.copyOutput()
     await appModule.copyOutput()
@@ -76,6 +79,7 @@ describe('gate 3: copyOutput double-click repeat', () => {
   })
 
   test('a repeat after the content CHANGED writes again', async () => {
+    vi.useFakeTimers({ now: 0 })
     _outputEl.value = 'first output'
     await appModule.copyOutput()
     _outputEl.value = 'second output'
@@ -84,11 +88,25 @@ describe('gate 3: copyOutput double-click repeat', () => {
     expect(_clipboard.writeText).toHaveBeenLastCalledWith('second output')
   })
 
+  test('a repeat after the window LAPSED writes again (time moved past 1500ms)', async () => {
+    vi.useFakeTimers({ now: 0 })
+    _outputEl.value = 'same output'
+    await appModule.copyOutput()
+    vi.setSystemTime(1600) // past the Copied! window
+    await appModule.copyOutput()
+    expect(_clipboard.writeText).toHaveBeenCalledTimes(2)
+  })
+
   test('the guard resets via the test seam (window lapse simulation)', async () => {
+    vi.useFakeTimers({ now: 0 })
     _outputEl.value = 'same output'
     await appModule.copyOutput()
     appModule._resetCopyGuardForTests()
     await appModule.copyOutput()
     expect(_clipboard.writeText).toHaveBeenCalledTimes(2)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 })

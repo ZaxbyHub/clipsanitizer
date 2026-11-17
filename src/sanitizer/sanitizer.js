@@ -2,6 +2,25 @@
 import { CHARMAP } from './charmap.js'
 import { GREEK_TRANSLIT } from './greek.js'
 
+// Transliteration fallback (issue history): Latin letters that do NOT
+// decompose under NFKD at all, mapped by hand. Module-level + exported so
+// scripts/export-foldtable.js ships the SAME table (single source of truth;
+// the sync test pins it). Keep in sync with the pipeline order: applied
+// BEFORE NFKD.
+export const TRANSLITERATION_FALLBACK = [
+  ['ø', 'o'],   // ø -> o
+  ['Ø', 'O'],   // Ø -> O
+  ['ł', 'l'],   // ł -> l
+  ['Ł', 'L'],   // Ł -> L
+  ['ß', 'ss'],  // ß -> ss
+  ['đ', 'd'],   // đ -> d
+  ['Đ', 'D'],   // Đ -> D
+  ['þ', 'th'],  // þ -> th
+  ['Þ', 'Th'],  // Þ -> Th
+  ['ð', 'd'],   // ð -> d
+  ['Ð', 'D'],   // Ð -> D
+]
+
 /**
  * sanitize(input)
  *
@@ -55,41 +74,12 @@ export function sanitize(input) {
   // Replaces the former NFKC-only step.
   // NFKD decomposes é → e + ́  (combining acute). Strip combining marks → e.
   // Fallback map handles chars that don't decompose under NFKD at all.
-  const TRANSLITERATION_FALLBACK = [
-    ['\u00F8', 'o'],   // ø → o
-    ['\u00D8', 'O'],   // Ø → O
-    ['\u0142', 'l'],   // ł → l
-    ['\u0141', 'L'],   // Ł → L
-    ['\u00DF', 'ss'],  // ß → ss
-    ['\u0111', 'd'],   // đ → d
-    ['\u0110', 'D'],   // Đ → D
-    ['\u00FE', 'th'],  // þ → th
-    ['\u00DE', 'Th'],  // Þ → Th
-    ['\u00F0', 'd'],   // ð → d
-    ['\u00D0', 'D'],   // Ð → D
-  ]
+  // (TRANSLITERATION_FALLBACK is the exported module-level table above.)
 
   // Apply fallback BEFORE NFKD so these chars don't survive into the final strip
   const beforeTranslit = text
   for (const [from, to] of TRANSLITERATION_FALLBACK) {
     if (text.includes(from)) text = text.split(from).join(to)
-  }
-
-  // Greek transliteration (issue #357 gate — the 'Greek letter drop' fix):
-  // without this, every Greek letter outside CHARMAP's lone μ was silently
-  // destroyed by the final ASCII strip ('Δόση 5mg' → '5mg'). Runs after the
-  // fallback map and before NFKD, so polytonic forms decompose to mapped
-  // base letters + strippable combining marks. Each replacement is counted
-  // so the change summary stays honest.
-  const beforeGreek = text
-  for (const [from, to] of GREEK_TRANSLIT) {
-    if (!text.includes(from)) continue
-    const greekBefore = text
-    text = text.split(from).join(to)
-    if (text !== greekBefore) {
-      const key = `greek:${from}→${to}`
-      changeCounts.set(key, (changeCounts.get(key) ?? 0) + (greekBefore.split(from).length - 1))
-    }
   }
 
   // NFKD decomposition + combining mark removal (handles é, ñ, ü, â, etc.)
@@ -101,6 +91,24 @@ export function sanitize(input) {
   // Track whether any transliteration occurred
   if (text !== beforeNFKD || text !== beforeTranslit) {
     changeCounts.set('nfkd_normalize', 1)
+  }
+
+  // Greek transliteration (issue #357 gate — the 'Greek letter drop' fix):
+  // without this, every Greek letter outside CHARMAP's lone μ was silently
+  // destroyed by the final ASCII strip ('Δόση 5mg' → '5mg'). Runs AFTER the
+  // NFKD + mark strip: polytonic precomposed forms (ᾶ, ἀ-ώ breathing forms)
+  // decompose AT NFKD to base letters + marks, so running the table here
+  // catches every decomposed base letter — running it before NFKD missed
+  // them. Each replacement is counted so the change summary stays honest.
+  const beforeGreek = text
+  for (const [from, to] of GREEK_TRANSLIT) {
+    if (!text.includes(from)) continue
+    const greekBefore = text
+    text = text.split(from).join(to)
+    if (text !== greekBefore) {
+      const key = `greek:${from}→${to}`
+      changeCounts.set(key, (changeCounts.get(key) ?? 0) + (greekBefore.split(from).length - 1))
+    }
   }
 
   // ── Step 3: Unicode whitespace → regular space ────────────────────────────
